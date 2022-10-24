@@ -1,0 +1,28 @@
+# UE temporal folders
+Binaries
+DerivedDataCache
+Intermediate
+Saved
+Build
+
+# Editor files and artifacts
+.vscode
+.vs
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+.idea
+
+# Plugin for Rider IDE
+Plugins/Developer/RiderLink/
+
+# Mac related files
+.DS_Store
+
+# Editor path variables file
+editor_vars.bat
