@@ -14,7 +14,7 @@ $ editor
 
 Una vez que tenemos el editor abierto, con el atajo <kbd>ctrl</kbd> + <kbd>N</kbd> crearemos un nuevo nivel y usaremos la plantilla _Basic_:
 
-![New Level](images/02_assets_import/new_level.jpg)
+<img src="images/02_assets_import/new_level.jpg" width=300 />
 
 Ahora con <kbd>ctrl</kbd> + <kbd>S</kbd> lo guardaremos y le daremos el nombre de `MainLevel`.
 
@@ -39,7 +39,7 @@ Como hemos visto en teoría, el punto de partida para cualquier juego de UE es u
 
 Para ello, la forma más fácil es ir a _Project Settings_:
 
-![Project settings](images/02_assets_import/project_settings.jpg)
+<img src="images/02_assets_import/project_settings.jpg" width=500 />
 
 Y dentro de la sección de _Maps & Modes_, modificar los mapas por defecto:
 

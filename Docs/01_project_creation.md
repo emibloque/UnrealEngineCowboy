@@ -6,7 +6,8 @@ Crearemos una nueva carpeta llamada `Cowboy`, donde residirá todo nuestro juego
 
 Abriremos esa carpeta con Visual Studio Code (o cualquier otro editor) y aprovecharemos para abrir una terminal. Podemos escoger qué tipo de terminal lanzar, los comandos que veremos a continuación están pensados para CMD, por lo tanto debemos usar `Command Prompt` como terminal:
 
-![Terminal](images/01_project_creation/terminal.jpg)
+<img src="images/01_project_creation/terminal.jpg" width=150 />
+
 
 En esta terminal, inicializaremos un proyecto de Git, que nos servirá para llevar el control de los cambios que hacemos en nuestro juego y entender mejor qué cambios hace Unreal Engine:
 
