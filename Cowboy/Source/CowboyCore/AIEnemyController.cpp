@@ -20,7 +20,7 @@ void AAIEnemyController::OnPossess(APawn* InPawn)
 
 void AAIEnemyController::FollowPlayer()
 {
-	if (TargetPlayer)
+	if (TargetPlayer && GetPawn())
 	{
 		MoveToActor(TargetPlayer, -1.f, false);
 	}

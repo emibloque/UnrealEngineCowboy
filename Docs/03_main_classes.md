@@ -193,7 +193,8 @@ Los `APawn` (o `ACharacter` ya que heredan de ellos), cuando son controlados por
 Cuando un `APawn` no es controlado por un jugador, se presupone que tiene que ser controlado por una inteligencia artificial, por lo que (dependiendo de la propiedad [`APawn::AutoPossessAI`](https://github.com/EpicGames/UnrealEngine/blob/release/Engine/Source/Runtime/Engine/Classes/GameFramework/Pawn.h#L105-L111)) se le creará un `AAIController` según la clase indicada en la propiedad [`APawn::AIControllerClass`](https://github.com/EpicGames/UnrealEngine/blob/release/Engine/Source/Runtime/Engine/Classes/GameFramework/Pawn.h#L117-L119).
 
 > Nota: Vemos como la propiedad `APawn::AIControllerClass` es una `UPROPERTY` y del tipo `TSubclassOf<AController>`. Lo que en el Blueprint se reflejará como on _Dropdown_ de clases que hereden de `AController`:
-<img src="images/03_main_classes/controller_class.jpg" width=500 />
+>
+> <img src="images/03_main_classes/controller_class.jpg" width=500 />
 
 
 Dicho esto, crearemos un `APawn` para nuestro enemigo base y un `AAIController` para la lógica de ese enemigo.
@@ -282,7 +283,7 @@ void AAIEnemyController::OnPossess(APawn* InPawn)
 
 void AAIEnemyController::FollowPlayer()
 {
-	if (TargetPlayer)
+	if (TargetPlayer && GetPawn())
 	{
 		MoveToActor(TargetPlayer, -1.f, false);
 	}
@@ -309,7 +310,7 @@ Diseccionado el código anterior:
     > Aquí estamos usando [`ThisClass`](https://github.com/EpicGames/UnrealEngine/blob/release/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h#L1639-L1646). Es un alias a la clase actual que UE nos provee (al igual que `Super`), podríamos usar `&AAIEnemyController::OnFollowCompleted`, pero es más verboso.
     4. Llamamos a `FollowPlayer` para iniciar el seguimiento.
 2. En `OnPosses` llamamos a `FollowPlayer` para inciar el seguimiento. Cuando el actor **no** está situado en el nivel desde el inicio (es decir, cuando hacemos un Spawn), `BeginPlay` se llamará antes que `OnPosses`, por lo que no tenemos un `Pawn` poseído y el `MoveToActor` no funcionará, por eso tenemos que llamarlo aquí también.
-3. En `FollowPlayer` comprobamos que tenemos una referencia **válida** de nuestro _target_ e invocamos el metodo `AAIController::MoveToActor`, diciéndole que el `AcceptanceRadius` sea el mínimo por defecto y que no se pare cuando haga _overlap_.
+3. En `FollowPlayer` comprobamos que tenemos una referencia **válida** de nuestro _target_ y que estamos poseyendo a un peón, e invocamos el metodo `AAIController::MoveToActor`, diciéndole que el `AcceptanceRadius` sea el mínimo por defecto y que no se pare cuando haga _overlap_.
 4. En `OnMovementProcessed` usamos el componente de `Velocity` en el plano horizontal y decimos que actualice la orientación de nuestro actor hacia donde apunta su velocidad. Es decir, que mire hacia donde estamos yendo.
 5. En `OnFollowCompleted` volvemos a llamar otra vez a `FollowPlayer`, para que siga persiguiendo a nuestro jugador indefinidamente, aunque choquemos con él una vez.
 
@@ -388,14 +389,354 @@ Dentro del editor, aprovecharemos para colocar un Nav Mesh Volume, que indicará
 
 ## Generador de enemigos
 
+Ahora crearemos un Actor que nos genere enemigos automáticamente dentro de un área que le indiquemos visualmente, también le daremos varias propiedas para que sea configurable manualmente mediante Blueprint.
+
+> Esta clase usará el concepto de [Timers](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/ProgrammingWithCPP/UnrealArchitecture/Timers/), funcionan similar a los [timers de blueprint](https://docs.unrealengine.com/4.26/en-US/InteractiveExperiences/UseTimers/).
+
+Crearemos una clase `EnemySpawner` que herede de `AActor`. El cuerpo de su cabecera (`Source/CowboyCore/EnemySpawner.h`) será:
+
+```cpp
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Enemy.h"
+#include "Components/BoxComponent.h"
+#include "GameFramework/Actor.h"
+#include "EnemySpawner.generated.h"
+
+UCLASS()
+class COWBOYCORE_API AEnemySpawner : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	// Sets default values for this actor's properties
+	AEnemySpawner();
+
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
+public:
+	/* Area within where enemies will be spawned */
+	UPROPERTY(EditAnywhere, Category = "Enemy Spawner")
+	UBoxComponent* SpawningArea;
+	
+	/* Class of enemies to be spawned */
+	UPROPERTY(EditAnywhere, Category = "Enemy Spawner")
+	TSubclassOf<AEnemy> EnemyClass = AEnemy::StaticClass();
+
+	/* Time in seconds between enemy spawns */
+	UPROPERTY(EditAnywhere, Category = "Enemy Spawner")
+	float SpawnRate = 1.f;
+
+	/* Amount of enemies to be spawned. If -1, infinite enemies will be spawned */
+	UPROPERTY(EditAnywhere, Category = "Enemy Spawner")
+	int32 NumberOfEnemiesToSpawn = -1;
+
+
+private:
+	int32 TotalEnemiesSpawned = 0;
+
+	void SpawnEnemy();
+	
+	FTimerHandle SpawnEnemyHandle; 
+};
+```
+
+En esta cabecera vemos los siguientes elementos:
+1. El constructor y el método `BeginPlay` sobreescrito.
+2. Una serie de propiedades públicas, etiquetadas con el macro `UPROPERTY`. Estas propiedades tienen el especificador [`EditAnywhere`](https://benui.ca/unreal/uproperty/#editanywhere) que nos permitirá editar el valor de esta propiedad tanto en los _defaults_ del Blueprint, como en una instancia colocada en el nivel. También tienen el especificador de categoría, que nos agrupará en el editor las propiedades bajo el mismo título `"Enemy Spawner"`. Estas propiedades son:
+    1. `SpawningArea`: Un `UBoxComponent` que nos servirá como referencia para indicar el área donde pueden aparecer enemigos.
+    2. `EnemyClass`: La clase que utilizaremos para instanciar nuevos enemigos. Al usar `TSubclassOf<AEnemy>`, esta propiedad solo aceptará clases que hereden de `AEnemy`. La ventaja de guardar esto como propiedad es que podremos crear varios Spawners de diferentes enemigos solo cambiando el valor de esta propiedad en el editor. Por defecto le damos el valor de la clase `AEnemy`.
+    3. `SpawnRate`: Cada cuanto queremos que se generen nuevos enemigos.
+    4. `NumberOfEnemiesToSpawn`: Cuántos enemigos vamos a hacer Spawn. Si es `-1` serán infinitos.
+3. Luego tenemos una propiedad `TotalEnemiesSpawned` para mantener la cuenta de los enemigos que vamos creando.
+4. La función `SpawnEnemy` en la que implementaremos la lógica que necesitemos para crear enemigos.
+5. Finalmente tenemos la propiedad `SpawnEnemyHandle`, que nos servirá para guardar una referencia al último timer que hemos creado para invocar en el futuro a `SpawnEnemy`.
+
+> Nota: cuando añadimos comentarios tipo JavaDoc en una `UPROPERTY`, ese comentario será interpretado por UE y se mostrará en el editor al hacer Hover:
+>
+> <img src="images/03_main_classes/comment.jpg" width=300 />
+
+
+Y tendremos el siguiente código en `Source/CowboyCore/EnemySpawner.cpp`:
+
+```cpp
+#include "EnemySpawner.h"
+#include "Kismet/KismetMathLibrary.h"
+
+// Sets default values
+AEnemySpawner::AEnemySpawner()
+{
+	SpawningArea = CreateDefaultSubobject<UBoxComponent>("SpawningArea");
+	RootComponent = SpawningArea;
+	SpawningArea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+// Called when the game starts or when spawned
+void AEnemySpawner::BeginPlay()
+{
+	Super::BeginPlay();
+	SpawnEnemy();
+}
+
+void AEnemySpawner::SpawnEnemy()
+{
+	if (NumberOfEnemiesToSpawn != -1 && TotalEnemiesSpawned >= NumberOfEnemiesToSpawn)
+	{
+		return;
+	}
+	
+	FVector RandomPoint = UKismetMathLibrary::RandomPointInBoundingBox(GetActorLocation(),
+	                                                                   SpawningArea->GetScaledBoxExtent());
+	RandomPoint.Z = GetActorLocation().Z;
+
+	const FRotator RandomRotation = FRotator(0.f, FMath::FRand() * 360.f, 0.f);
+
+	GetWorld()->SpawnActor<AEnemy>(EnemyClass, RandomPoint, RandomRotation);
+	TotalEnemiesSpawned++;
+
+	GetWorld()->GetTimerManager().SetTimer(SpawnEnemyHandle, this, &ThisClass::SpawnEnemy, SpawnRate);
+}
+```
+
+En este fichero hacemos lo siguiente:
+1. En el constructor instanciamos un nuevo componente `UBoxCollision`, que indicamos que sea el componente raíz y finalmente le decimos que no nos interesa su colisión (solo lo usaremos como referencia visual).
+2. En la función `BeginPlay` únicamente llamamos a `SpawnEnemy` por primera vez para que se empiece a llamar de continuo a sí misma.
+3. Dentro de nuestra función `SpawnEnemy`:
+    1. Comprobamos que no hemos llegado al límite de enemigos generados.
+    2. Obtenemos un punto aleatorio dentro del área definida.
+    3. Asignamos ese punto a la base de nuestro Actor (para que si hemso creado la caja muy alta, no nos salgan volando los enemigos).
+    4. Para que no salgan todos los enemigos mirando al mismo lado, generamos una rotación aleatoria (únicamente en el eje Z).
+    5. Hacemos Spawn de un nuevo enemigo en base a la clase definida en la propiedad `EnemyClass`. Esta función nos devuelve un puntero al objeto creado, por si lo necesitaramos.
+    6. Aumentamos la cuenta de los enemigos creados.
+    7. Encolamos una llamada de nuevo a `SpawnEnemy` con un timer, que será invocada en base al tiempo indicado en `SpawnRate` en segundos.
+
 ### Blueprint
+
+Con la clase anterior como base, crearemos un nuevo Blueprint:
+
+![Create BP Spawner](images/03_main_classes/create_bp_spawner.gif)
+
+Indicaremos los valores por defecto que nos interesen:
+
+![BP Spawner properties](images/03_main_classes/bp_spawner_properties.gif)
+
+Y lo colocaremos en el nivel, ajustando su tamaño:
+
+![Place BP Spawner](images/03_main_classes/place_bp_spawner.gif)
+
+Si le damos al play veremos como nos persiguen los nuevos enemigos:
+
+![Play follow](images/03_main_classes/follow_play.gif)
 
 ## Proyectiles
 
+Ahora crearemos una clase que nos servirá para indicar la base de nuestros disparos.
+Creamos una clase `Projectile` que herede de actor, y su cabecera será únicamente:
+
+```cpp
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "GameFramework/ProjectileMovementComponent.h"
+#include "Projectile.generated.h"
+
+UCLASS()
+class COWBOYCORE_API AProjectile : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AProjectile();
+
+	UPROPERTY(EditDefaultsOnly)
+	UProjectileMovementComponent* MovementComponent;
+};
+```
+
+Solo le añadiremos un componente de movimiento de proyectil, que nos servirá para lanzarlo a una velocidad en específico.
+
+Y el cuerpo de esta clase:
+
+```cpp
+#include "Projectile.h"
+
+AProjectile::AProjectile()
+{
+	MovementComponent = CreateDefaultSubobject<UProjectileMovementComponent>("MovementComponent");
+}
+```
+
 ### Blueprint
+
+Extenderemos de esta clase y crearemos un fichero `BP_Projectile`:
+
+Le añadiremos una caja básica como representación visual y ajustaremos su colisión para que hage overlap con todos los elementos:
+
+Ajustaremos la velocidad inicial del proyectil y le quitamos la gravedad:
+
+Y finalmente le diremos que tenga un _Life Span_ de 2 segundos, para que el actor se destruya pasado este tiempo:
 
 ## Shooting Component
 
+Podríamos crear la lógica de disparo directamente dentro de la clase `CowboyPlayer`, pero eso implicaría que si quisieramos hacer enemigos que disparasen, tendríamos que duplicar la lógica.
+
+De este modo, extraeremos esta lógica en un componente de disparo, el cual pueda ser "equipado" por cualquier tipo de actor.
+
+Crearemos una clase `ShootingComponent` que herede de `ActorComponent`:
+
+<img src="images/03_main_classes/shooting_component.jpg" width=300>
+
+La cabecera de este componente será:
+
+```cpp
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "Projectile.h"
+#include "Components/ArrowComponent.h"
+
+#include "ShootingComponent.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnShoot);
+
+UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+class COWBOYCORE_API UShootingComponent : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+	virtual void BeginPlay() override;
+
+	void Shoot();
+
+	UPROPERTY(BlueprintAssignable)
+	FOnShoot OnShoot;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Cowboy Shooting")
+	float ShootingCooldownTime = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Cowboy Shooting")
+	TSubclassOf<AProjectile> ProjectileClass;
+
+private:
+	float LastShootingTime = 0.f;
+	UPROPERTY()
+	TArray<UArrowComponent*> ShootingArrows;
+};
+```
+
+En esta cabecera vemos cosas nuevas que explicaremos a continuación:
+
+1. La directiva `DECLARE_DYNAMIC_MULTICAST_DELEGATE` crea un nuevo **tipo** de Delegate personalizado para que nosostros podamos usar. Este delegate no tiene parámetros y le ponemos el nombre `FOnShoot` (por convención se suele poner el prefijo `F` y el nombre que queramos, como es un evento, suele ser común poner `On` delante de la acción).
+2. A la directiva de `UCLASS` le pasamos los especificadores [`ClassGroup`](https://benui.ca/unreal/uclass/#classgroup) y [`BlueprintSpawnableComponent`](https://benui.ca/unreal/uclass/#blueprintspawnablecomponent). El último le dirá que puede aparecer en el Dropdown de componentes a añadir a un actor y el primero le dirá que aparecerá dentro de la categoría `Custom`:
+
+    <img src="images/03_main_classes/shooting_component_dropdown.jpg" width=300>
+3. Sobre escribimos `BeginPlay` y creamos una función pública `Shoot` que nos servirá para que el actor dueño del componente invoque nuestro disparo.
+4. La propiedad `OnShoot` del tipo `FOnShoot` (el tipo de delegate creado antes) en realidad no es una propiedad al uso, si no un Evento asignable de Blueprint (debido al `BlueprintAssignable`) que veremos más adelante. Este evento se invocará cuando disparemos y nos servirá para controlar los efectos especiales (en este caso un sonido) después del disparo de manera visual por Blueprint.
+5. Como no queremos disparar de manera indiscriminada, añadiremos un tiempo de _cooldown_ que podrá ser ajustado por la propiedad `ShootingCooldownTime`. Esta vez las propiedades usarán [`EditDefaultsOnly`](https://benui.ca/unreal/uproperty/#editdefaultsonly), porque solo queremos que se actualicen en el _Archetype_, es decir en la clase de Blueprint y no en las instancias del nivel, pero podríamos cambiar esto a `EditAnywhere` si fuera necesario.
+6. `ProjectileClass` será la clase usada para hacer spawn del proyectil al disparar, esto nos permitirá modificar la clase del proyectil en tiempo de ejecución (por ejemplo si recogemos _power ups_) sin necesidad de duplicar lógica. Para que podamos modificar y leer el valor de esta variable en Blueprints, añadimos [`BlueprintReadWrite`](https://benui.ca/unreal/uproperty/#blueprintreadwrite).
+7. Finalmente, tenemos dos propiedades privadas: `LastShootingTime` para saber cuándo fue el último disparo y `ShootingArrows` para mantener una lista de los puntos donde queremos lanzar disparos, que veremos a continuación.
+
+El cuerpo de este componente sería de la siguiente manera:
+
+```cpp
+#include "ShootingComponent.h"
+
+void UShootingComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	LastShootingTime = GetWorld()->GetTimeSeconds() - ShootingCooldownTime;
+
+	if (GetOwner())
+	{
+		const auto Arrows = GetOwner()->GetComponentsByTag(UArrowComponent::StaticClass(), FName("ShootingArrow"));
+		for (const auto& Arrow : Arrows)
+		{
+			ShootingArrows.Add(Cast<UArrowComponent>(Arrow));
+		}
+	}
+}
+
+void UShootingComponent::Shoot()
+{
+	if (!ProjectileClass) return;
+
+	if (LastShootingTime > GetWorld()->GetTimeSeconds() + ShootingCooldownTime) return;
+
+	LastShootingTime = GetWorld()->GetTimeSeconds();
+
+	for (const auto& Arrow : ShootingArrows)
+	{
+		GetWorld()->SpawnActor<AProjectile>(ProjectileClass,
+		                                    Arrow->GetComponentLocation(),
+		                                    Arrow->GetComponentRotation());
+	}
+
+	OnShoot.Broadcast();
+}
+```
+
+Dentro del método `BeginPlay`:
+1. Ajustamos el `LastShootingTime` al tiempo actual menos el cooldown indicado. De esta manera podremos disparar inmediatamente la primera vez.
+2. Si todo es válido y estamos asignados a un actor, buscaremos todos los componentes del tipo `UArrowComponent` que estén etiquetados con el tag `"ShootingArrow"` (este tag es un `FName`, por eso hay que envolverlo en su constructor).
+3. Finalmente, para cada uno de esos componentes encontrados, los añadiremos al array de flechas que teníamos como propiedad.
+
+En el método `Shoot`:
+1. Comprobaremos que tenemos una clase válida para _spawnear_.
+2. Comprobamos que hemos pasado el tiempo de _cooldown_ para poder disparar.
+3. Actualizamos el tiempo del último disparo
+4. Por cada flecha que tiene nuestro actor, crearemos un proyectil nuevo usando la transformación de la flecha.
+5. Finalmente llamamos a evento `OnShoot` para que quien esté suscrito reciba la notificación. 
+
+### Actualizar Cowboy
+
+Añadiremos el componente anterior creado a nuestro `CowboyPlayer`. Así que en `CowboyPlayer.h` haremos el siguiente cambio:
+
+```diff
+ #pragma once
+
+ #include "CoreMinimal.h"
++#include "ShootingComponent.h"
+ #include "GameFramework/Character.h"
+ #include "CowboyPlayer.generated.h"
+
+@@ -13,5 +14,7 @@ class COWBOYCORE_API ACowboyPlayer : public ACharacter
+
+ public:
+        ACowboyPlayer();
+
++       UPROPERTY(EditDefaultsOnly, Category = "Cowboy Shooting")
++       UShootingComponent* ShootingComponent;
+ };
+```
+
+Y en `CowboyPlayer.cpp` el siguiente cambio:
+
+```diff
+ #include "CowboyPlayer.h"
+
+ ACowboyPlayer::ACowboyPlayer()
+ {
++       ShootingComponent = CreateDefaultSubobject<UShootingComponent>("ShootingComponent");
+ }
+```
+
+Dentro del blueprint de `BP_Cowboy` crearemos unos componentes arrow, ajustaremos su posición y le añadiremos la etiqueta `ShootingArrow`:
+
+![Add arrows](images/03_main_classes/add_arrows.gif)
+
+Ajustaremos el shooting cooldown y la clase de proyectil:
+
+![Set cooldown and projectile class](images/03_main_classes/set_cooldown.gif)
+
+Y añadiremos un sonido de disparo cada vez que se llame al evento `OnShoot` (el delegate que hemos definido anteriormente):
+
+![Add on shoot event](images/03_main_classes/on_shoot.gif)
 
 ## Siguiente
 

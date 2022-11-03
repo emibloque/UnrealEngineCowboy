@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ShootingComponent.h"
 #include "GameFramework/Character.h"
 #include "CowboyPlayer.generated.h"
 
@@ -13,5 +14,7 @@ class COWBOYCORE_API ACowboyPlayer : public ACharacter
 
 public:
 	ACowboyPlayer();
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Cowboy Shooting")
+	UShootingComponent* ShootingComponent;
 };
