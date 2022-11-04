@@ -14,7 +14,16 @@ class COWBOYCORE_API ACowboyPlayer : public ACharacter
 
 public:
 	ACowboyPlayer();
+	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Cowboy Shooting")
 	UShootingComponent* ShootingComponent;
+
+private:
+	void MoveForward(float Value);
+	void MoveRight(float Value);
+	void RotateUp(float Value);
+	void RotateRight(float Value);
+	
+	FVector CurrentRotationDirection = FVector::ZeroVector;
 };

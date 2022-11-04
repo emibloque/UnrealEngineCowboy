@@ -738,6 +738,8 @@ Y añadiremos un sonido de disparo cada vez que se llame al evento `OnShoot` (el
 
 ![Add on shoot event](images/03_main_classes/on_shoot.gif)
 
+---
+
 ## Siguiente
 
 En el siguiente paso gestionaremos el input de nuestro juego, pero antes guardaremos y haremos commit de nuestro cambios en Git:
