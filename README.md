@@ -11,4 +11,8 @@ Las prácticas están divididas en varios apartados:
 3. [Clases principales](Docs/03_main_classes.md)
 4. [Gestión de input](Docs/04_input_routing.md)
 5. [Animaciones](Docs/05_animations.md)
-6. [Colisiones y seguimiento](Docs/06_collisions_and_following.md)
+6. [Colisiones](Docs/06_collisions.md)
+
+## Créditos
+
+Los assets usados en este proyecto son obra del coordinador de la asignatura [Jordán Pascual Espada](https://www.di.uniovi.es/personal/pdi/-/asset_publisher/0028/content/pdi_pascual-espada-jordan).

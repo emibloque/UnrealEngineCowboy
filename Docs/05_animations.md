@@ -84,4 +84,4 @@ $ git commit -m "Add animations"
 ```
 
 
-[Ir al siguente](06_collisions_and_following.md)
+[Ir al siguente](06_collisions.md)

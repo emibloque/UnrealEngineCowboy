@@ -574,11 +574,19 @@ AProjectile::AProjectile()
 
 Extenderemos de esta clase y crearemos un fichero `BP_Projectile`:
 
+![Create projectile](images/03_main_classes/create_projectile.gif)
+
 Le añadiremos una caja básica como representación visual y ajustaremos su colisión para que hage overlap con todos los elementos:
+
+![Add cube](images/03_main_classes/add_cube.gif)
 
 Ajustaremos la velocidad inicial del proyectil y le quitamos la gravedad:
 
+![Adjust speed](images/03_main_classes/adjust_speed.gif)
+
 Y finalmente le diremos que tenga un _Life Span_ de 2 segundos, para que el actor se destruya pasado este tiempo:
+
+![Life span](images/03_main_classes/life_span.gif)
 
 ## Shooting Component
 

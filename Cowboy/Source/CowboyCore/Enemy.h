@@ -14,6 +14,8 @@ protected:
 	AEnemy();
 
 public:
+	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
+
 	UPROPERTY(EditDefaultsOnly)
 	UFloatingPawnMovement* FloatingPawnMovement;
 };

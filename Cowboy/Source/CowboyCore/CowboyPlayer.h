@@ -18,6 +18,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Cowboy Shooting")
 	UShootingComponent* ShootingComponent;
+	
+	virtual void NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp, bool bSelfMoved,
+		FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit) override;
 
 private:
 	void MoveForward(float Value);
